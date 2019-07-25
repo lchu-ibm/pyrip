@@ -1,0 +1,10 @@
+.idea/
+.pytest_cache/
+__pycache__/
+.DS_Store
+__MACOSX
+.ipynb_checkpoints/
+# *.html
+build/
+dist/
+pyrip.egg-info/
