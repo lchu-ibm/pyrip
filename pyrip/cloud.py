@@ -11,25 +11,29 @@ def download(cos_client, bucket, key, download_dir):
     return os.path.join(download_dir, os.path.basename(key))
 
 
-def query_tiles(sql_client, cos_client, cos_url, target_cos_url, layers, start_date, end_date, bbox, download_dir, merge_tiles=True, force_bbox=True):
+def query_tiles(cos_client, cos_url, target_cos_url, layers, start_date, end_date, bbox, download_dir, sql_client=None, spark=None, merge_tiles=True, force_bbox=True):
     if isinstance(layers, six.string_types):
         layers = [layers]
 
-    # By default, the result will be written into target_cos in CSV format. We disable this and make it write as
-    # parquet to improvement performance
-    if sql_client.target_cos is not None:
-        sql_client.target_cos = None
-
     query_str = """
-    SELECT *
-    FROM {0} STORED AS PARQUET
-    WHERE layer in {1} AND date between {2} AND {3}
-    AND lat between {4[1]} AND {4[3]} AND lon between {4[0]} AND {4[2]}
-    INTO {5} STORED AS parquet
-    """.format(cos_url, tuple(layers), start_date, end_date, bbox, target_cos_url)
+        SELECT *
+        FROM {0} STORED AS PARQUET
+        WHERE layer in {1} AND date between {2} AND {3}
+        AND lat between {4[1]} AND {4[3]} AND lon between {4[0]} AND {4[2]}
+        INTO {5} STORED AS parquet
+        """.format(cos_url, tuple(layers), start_date, end_date, bbox, target_cos_url)
     # ST_Contains(ST_WKTToSQL('BOUNDINGBOX({} {}, {} {})'), ST_Point(lon, lat))
 
-    df = sql_client.run_sql(query_str)
+    if sql_client is not None:
+        # By default, the result will be written into target_cos in CSV format. We disable this and make it write as
+        # parquet to improvement performance
+        if sql_client.target_cos is not None:
+            sql_client.target_cos = None
+        df = sql_client.run_sql(query_str)
+    elif spark is not None:
+        df = spark.sql(query_str).toPandas()
+    else:
+        raise ValueError('Either sql_client or spark has to be set.')
 
     if not os.path.exists(download_dir):
         os.makedirs(download_dir)
