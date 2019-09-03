@@ -1,7 +1,6 @@
 import os
 import six
 import tempfile
-from pyrip.image import merge
 
 
 def download(cos_client, bucket, key, download_dir):
@@ -38,6 +37,7 @@ def query_tiles(cos_client, cos_url, target_cos_url, layers, start_date, end_dat
     if not os.path.exists(download_dir):
         os.makedirs(download_dir)
     if merge_tiles:
+        from pyrip.image import merge
         merged_images = []
         for layer in layers:
             tmp_df = df[df['layer'] == layer].sort_values(['date', 'lat', 'lon'])
