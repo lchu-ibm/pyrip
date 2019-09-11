@@ -1,7 +1,6 @@
 import os
 import six
 import tempfile
-from pyrip.image import merge
 
 
 def download(cos_client, bucket, key, download_dir):
@@ -11,12 +10,28 @@ def download(cos_client, bucket, key, download_dir):
     return os.path.join(download_dir, os.path.basename(key))
 
 
-def query_tiles_with_spark(spark, cos_client, cos_url, layers, start_date, end_date, bbox, download_dir, merge_tiles=True, force_bbox=True):
+def query_tiles_with_spark(spark, api_key, instance_crn, endpoint_url, bucket, image_meta_prefix, layers, start_date, end_date, bbox, download_dir, merge_tiles=True, force_bbox=True):
     if isinstance(layers, six.string_types):
         layers = [layers]
 
-    spark.read.parquet(cos_url).createOrReplaceTempView('temp_view')
+    # Get COS client for downloading tiles
+    import ibm_boto3
+    from ibm_botocore.client import Config
+    cos_client = ibm_boto3.client("s3",
+        ibm_api_key_id=api_key,
+        ibm_service_instance_id=instance_crn,
+        endpoint_url=endpoint_url,
+        config=Config(signature_version="oauth")
+    )
 
+    # Config Spark for reading meta data
+    sc = spark.sparkContext
+    sc._jsc.hadoopConfiguration().set('fs.cos.myCos.endpoint', endpoint_url)
+    sc._jsc.hadoopConfiguration().set('fs.cos.myCos.iam.api.key', api_key)
+    sc._jsc.hadoopConfiguration().set('fs.cos.myCos.iam.service.id', instance_crn)
+
+    # Get meta data
+    spark.read.parquet('cos://{}.myCos/{}'.format(bucket, image_meta_prefix)).createOrReplaceTempView('temp_view')
     df = spark.sql("""
     SELECT *
     FROM temp_view
@@ -27,6 +42,7 @@ def query_tiles_with_spark(spark, cos_client, cos_url, layers, start_date, end_d
     if not os.path.exists(download_dir):
         os.makedirs(download_dir)
     if merge_tiles:
+        from pyrip.image import merge
         merged_images = []
         for layer in layers:
             tmp_df = df[df['layer'] == layer].sort_values(['date', 'lat', 'lon'])
@@ -77,6 +93,7 @@ def query_tiles(sql_client, cos_client, cos_url, target_cos_url, layers, start_d
     if not os.path.exists(download_dir):
         os.makedirs(download_dir)
     if merge_tiles:
+        from pyrip.image import merge
         merged_images = []
         for layer in layers:
             tmp_df = df[df['layer'] == layer].sort_values(['date', 'lat', 'lon'])
