@@ -157,12 +157,14 @@ def df_to_tif(df, outfile, xres, yres=None, bbox=None, val_col='value', nodata=-
             return stack_bands(tif_files, outfile)
 
 
-def hdf_to_tif(infile, outdir=None):
+def hdf_to_tif(infile, outdir=None, match_substrs=None):
     ds = gdal.Open(infile, gdal.GA_ReadOnly)
     outfiles = []
     for sub_ds in ds.GetSubDatasets():
         sub_ds_name = sub_ds[0]
         sub_ds_layer_name = sub_ds_name.split(':')[-1]
+        if match_substrs is not None and not any(match_substr in sub_ds_layer_name for match_substr in match_substrs):
+            continue
         if outdir is None:
             outfile = os.path.splitext(infile)[0] + '.' + sub_ds_layer_name + '.tiff'
         else:
