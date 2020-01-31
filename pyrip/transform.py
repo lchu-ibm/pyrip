@@ -6,6 +6,9 @@ import rasterio
 import os
 from pyrip.util import create_xyz_vrt
 from pyrip.bands import stack_bands
+import tempfile
+import zipfile
+from pathlib import Path
 
 from osgeo import gdal
 # Fix a bug in conda gdal: https://github.com/OSGeo/gdal/issues/1231
@@ -178,3 +181,25 @@ def hdf_to_tif(infile, outdir=None, match_substrs=None):
     return outfiles
 
 
+def safe_to_tif(infile, outdir=None, patterns=None):
+    outdir = outdir or str(Path(infile).resolve().parent)
+    patterns = patterns or ['*.jp2']
+    # if .SAFE dir:
+    if os.path.isdir(infile):
+        outfiles = []
+        jp2_files = []
+        for pattern in patterns:
+            jp2_files.extend(Path(infile).rglob(pattern))
+        for jp2_file in jp2_files:
+            outfile = os.path.join(outdir, os.path.splitext(os.path.basename(str(jp2_file)))[0] + '.tiff')
+            args = ['gdal_translate', '-of', 'GTiff', str(jp2_file), outfile]
+            subprocess.run(args, check=True, stdout=subprocess.DEVNULL)
+            outfiles.append(outfile)
+        return outfiles
+    elif zipfile.is_zipfile(infile):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with zipfile.ZipFile(infile) as zip_ref:
+                zip_ref.extractall(tmpdir)
+            return safe_to_tif(tmpdir, outdir, patterns)
+    else:
+        raise TypeError("infile must be either a directory or zip file")
