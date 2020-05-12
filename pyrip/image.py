@@ -2,14 +2,12 @@ import os
 import rasterio
 import subprocess
 from rasterio.windows import Window, transform
-
-from osgeo import gdal
-# Fix a bug in conda gdal: https://github.com/OSGeo/gdal/issues/1231
-if ';' in os.environ["PATH"]:
-    os.environ["PATH"] = os.environ["PATH"].split(';')[1]
+from rasterio.io import MemoryFile
 
 
 def get_bounds(file):
+    if isinstance(file, bytes):
+        return MemoryFile(file).open().bounds
     return rasterio.open(file).bounds
 
 
@@ -26,14 +24,18 @@ def merge(files, outfile, bbox=None):
         os.makedirs(os.path.dirname(outfile))
     subprocess.run(args, check=True, stdout=subprocess.DEVNULL)
 
-    # Copy existing band descriptions to the merged image
-    descriptions = rasterio.open(files[0]).descriptions
-    ds = gdal.Open(outfile, gdal.GA_Update)
-    for band, desc in enumerate(descriptions, start=1):
-        if desc is not None:
-            rb = ds.GetRasterBand(band)
-            rb.SetDescription(desc)
-    del ds
+    # # Copy existing band descriptions to the merged image
+    # from osgeo import gdal
+    # # Fix a bug in conda gdal: https://github.com/OSGeo/gdal/issues/1231
+    # if ';' in os.environ["PATH"]:
+    #     os.environ["PATH"] = os.environ["PATH"].split(';')[1]
+    # descriptions = rasterio.open(files[0]).descriptions
+    # ds = gdal.Open(outfile, gdal.GA_Update)
+    # for band, desc in enumerate(descriptions, start=1):
+    #     if desc is not None:
+    #         rb = ds.GetRasterBand(band)
+    #         rb.SetDescription(desc)
+    # del ds
 
     return outfile
 

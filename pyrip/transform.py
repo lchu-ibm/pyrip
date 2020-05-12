@@ -169,11 +169,11 @@ def hdf_to_tif(infile, outdir=None, match_substrs=None):
         if match_substrs is not None and not any(match_substr in sub_ds_layer_name for match_substr in match_substrs):
             continue
         if outdir is None:
-            outfile = os.path.splitext(infile)[0] + '.' + sub_ds_layer_name + '.tiff'
+            outfile = os.path.splitext(infile)[0] + '.' + sub_ds_layer_name + '.tif'
         else:
             if not os.path.exists(outdir):
                 os.makedirs(outdir)
-            outfilename = os.path.splitext(os.path.basename(infile))[0] + '.' + sub_ds_layer_name + '.tiff'
+            outfilename = os.path.splitext(os.path.basename(infile))[0] + '.' + sub_ds_layer_name + '.tif'
             outfile = os.path.join(outdir, outfilename)
         args = ['gdal_translate', '-of', 'GTiff', sub_ds_name, outfile]
         subprocess.run(args, check=True, stdout=subprocess.DEVNULL)
@@ -191,7 +191,7 @@ def safe_to_tif(infile, outdir=None, patterns=None):
         for pattern in patterns:
             jp2_files.extend(Path(infile).rglob(pattern))
         for jp2_file in jp2_files:
-            outfile = os.path.join(outdir, os.path.splitext(os.path.basename(str(jp2_file)))[0] + '.tiff')
+            outfile = os.path.join(outdir, os.path.splitext(os.path.basename(str(jp2_file)))[0] + '.tif')
             args = ['gdal_translate', '-of', 'GTiff', str(jp2_file), outfile]
             subprocess.run(args, check=True, stdout=subprocess.DEVNULL)
             outfiles.append(outfile)
@@ -203,3 +203,19 @@ def safe_to_tif(infile, outdir=None, patterns=None):
             return safe_to_tif(tmpdir, outdir, patterns)
     else:
         raise TypeError("infile must be either a directory or zip file")
+
+
+def grib_to_tif(infile, outfile=None):
+    outfile = outfile or os.path.splitext(infile)[0] + '.tif'
+    args = ['gdal_translate', '-of', 'GTiff', '-ot', 'Byte', '-scale', infile, outfile]
+    try:
+        subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+    except subprocess.CalledProcessError as e:
+        raise ValueError("""
+        Command Failed: {}
+        
+        STDOUT: {}
+        
+        STDERR: {}
+        """.format(' '.join(e.cmd), e.stdout.decode(), e.stderr))
+    return outfile
