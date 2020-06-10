@@ -83,6 +83,7 @@ if ';' in os.environ["PATH"]:
 #         df['value'] = df['value'].astype('int32')
 #     return df
 
+
 def tif_to_df(infile, drop_nodata=True):
     dataset = rasterio.open(infile)
     value = dataset.read(1).ravel()
@@ -217,5 +218,5 @@ def grib_to_tif(infile, outfile=None):
         STDOUT: {}
         
         STDERR: {}
-        """.format(' '.join(e.cmd), e.stdout.decode(), e.stderr))
+        """.format(' '.join(e.cmd), e.stdout.decode(), e.stderr.decode()))
     return outfile
