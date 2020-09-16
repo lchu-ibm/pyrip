@@ -11,9 +11,29 @@ if ';' in os.environ["PATH"]:
 def stack_bands(files, outfile):
     nodata = rasterio.open(files[0]).nodata
     if nodata is not None:
-        subprocess.run(['gdal_merge.py', '-separate', '-a_nodata', str(nodata), '-o', outfile, *files], check=True, stdout=subprocess.DEVNULL)
+        args = ['gdal_merge.py', '-separate', '-a_nodata', str(nodata), '-o', outfile, *files]
+        try:
+            subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        except subprocess.CalledProcessError as e:
+            raise ValueError("""
+            Command Failed: {}
+
+            STDOUT: {}
+
+            STDERR: {}
+            """.format(' '.join(e.cmd), e.stdout.decode(), e.stderr.decode()))
     else:
-        subprocess.run(['gdal_merge.py', '-separate', '-o', outfile, *files], check=True, stdout=subprocess.DEVNULL)
+        args = ['gdal_merge.py', '-separate', '-o', outfile, *files]
+        try:
+            subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        except subprocess.CalledProcessError as e:
+            raise ValueError("""
+            Command Failed: {}
+
+            STDOUT: {}
+
+            STDERR: {}
+            """.format(' '.join(e.cmd), e.stdout.decode(), e.stderr.decode()))
 
     # Copy existing band descriptions to the merged image
     descriptions = ()

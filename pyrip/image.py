@@ -22,7 +22,16 @@ def merge(files, outfile, bbox=None):
     args.extend(files)
     if not os.path.exists(os.path.dirname(outfile)):
         os.makedirs(os.path.dirname(outfile))
-    subprocess.run(args, check=True, stdout=subprocess.DEVNULL)
+    try:
+        subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+    except subprocess.CalledProcessError as e:
+        raise ValueError("""
+        Command Failed: {}
+
+        STDOUT: {}
+
+        STDERR: {}
+        """.format(' '.join(e.cmd), e.stdout.decode(), e.stderr.decode()))
 
     # # Copy existing band descriptions to the merged image
     # from osgeo import gdal

@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import tempfile
 import subprocess
 import rasterio
 import os
@@ -16,72 +15,12 @@ if ';' in os.environ["PATH"]:
     os.environ["PATH"] = os.environ["PATH"].split(';')[1]
 
 
-# def tif_to_xyz_gdal(infile, outfile, band=1, sep=',', header=False):
-#     args = ['gdal_translate', '-of', 'XYZ', infile, outfile]
-#     if band != 1:
-#         args.extend(['-b', str(band)])
-#     if sep != ' ':
-#         args.extend(['-co', 'COLUMN_SEPARATOR={}'.format(sep)])
-#     if header:
-#         args.extend(['-co', 'ADD_HEADER_LINE=YES'])
-#     subprocess.run(args)
-#     return outfile
-#
-#
-# def tif_to_df_gdal(infile, drop_nodata=True):
-#     dataset = rasterio.open(infile)
-#     num_bands = dataset.count
-#     if num_bands == 1:
-#         nodata = dataset.nodata
-#         with tempfile.NamedTemporaryFile() as tmpfile:
-#             tif_to_xyz_gdal(infile, tmpfile.name)
-#             df = pd.read_csv(tmpfile, header=None, names=['lon', 'lat', 'value'], na_values=nodata)
-#             if drop_nodata:
-#                 df.dropna(inplace=True)
-#         return df
-#     else:
-#         dfs = []
-#         for band in range(1, num_bands+1):
-#             nodata = dataset.nodatavals[band-1]
-#             desc = dataset.descriptions[band-1]
-#             with tempfile.NamedTemporaryFile() as tmpfile:
-#                 tif_to_xyz_gdal(infile, tmpfile.name, band=band)
-#                 df = pd.read_csv(tmpfile, header=None, names=['lon', 'lat', 'value'], na_values=nodata)
-#                 if drop_nodata:
-#                     df.dropna(inplace=True)
-#                 df['band_num'] = band
-#                 df['band_desc'] = desc
-#                 dfs.append(df)
-#         return pd.concat(dfs)
-
-
-# def tif_to_df(infile, drop_nodata=True):
-#     import psutil
-#     process = psutil.Process(os.getpid())
-#
-#     dataset = rasterio.open(infile)
-#     a, b, c, d, e, f, g, _, _ = dataset.transform
-#     affine_matrix = np.array([[a, b, c],
-#                               [d, e, f],
-#                               [0, 0, 1]])
-#     print("xy_pixel")
-#     nrows, ncols = dataset.shape
-#     xy_pixel = np.stack((np.tile(np.arange(ncols), nrows) + 0.5,
-#                          np.repeat(np.arange(nrows), ncols) + 0.5,
-#                          np.repeat(1, ncols * nrows)))
-#     print(process.memory_info().rss / 1000.0 / 1000 / 1000)
-#     print("xy_multiple")
-#     xy = np.matmul(affine_matrix, xy_pixel)
-#     print(process.memory_info().rss / 1000.0 / 1000 / 1000)
-#     print("df")
-#     df = pd.DataFrame({'lon': xy[0], 'lat': xy[1], 'value': dataset.read(1).ravel()})
-#     print(process.memory_info().rss / 1000.0 / 1000 / 1000)
-#     if drop_nodata:
-#         df = df[df['value'] != dataset.nodata]
-#     # Cast unsigned int (uint8, uint16, uint32) to int32 as spark does not support unsigned int in parquet files
-#     if 'uint' in dataset.dtypes[0].lower():
-#         df['value'] = df['value'].astype('int32')
-#     return df
+def tif_to_numpy(file):
+    with rasterio.open(file) as dataset:
+        if dataset.count == 1:
+            return dataset.read(1)
+        else:
+            return dataset.read()
 
 
 def tif_to_df(infile, drop_nodata=True):
@@ -129,7 +68,16 @@ def xyz_to_tif(infile, outfile, xres, yres=None, bbox=None, val_col='value', nod
         if bbox is not None:
             xmin, ymin, xmax, ymax = bbox
             args.extend(['-te', str(xmin), str(ymin), str(xmax), str(ymax)])
-        subprocess.run(args, check=True, stdout=subprocess.DEVNULL)
+        try:
+            subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        except subprocess.CalledProcessError as e:
+            raise ValueError("""
+            Command Failed: {}
+
+            STDOUT: {}
+
+            STDERR: {}
+            """.format(' '.join(e.cmd), e.stdout.decode(), e.stderr.decode()))
     return outfile
 
 
@@ -177,7 +125,16 @@ def hdf_to_tif(infile, outdir=None, match_substrs=None):
             outfilename = os.path.splitext(os.path.basename(infile))[0] + '.' + sub_ds_layer_name + '.tif'
             outfile = os.path.join(outdir, outfilename)
         args = ['gdal_translate', '-of', 'GTiff', sub_ds_name, outfile]
-        subprocess.run(args, check=True, stdout=subprocess.DEVNULL)
+        try:
+            subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        except subprocess.CalledProcessError as e:
+            raise ValueError("""
+            Command Failed: {}
+
+            STDOUT: {}
+
+            STDERR: {}
+            """.format(' '.join(e.cmd), e.stdout.decode(), e.stderr.decode()))
         outfiles.append(outfile)
     return outfiles
 
@@ -194,7 +151,16 @@ def safe_to_tif(infile, outdir=None, patterns=None):
         for jp2_file in jp2_files:
             outfile = os.path.join(outdir, os.path.splitext(os.path.basename(str(jp2_file)))[0] + '.tif')
             args = ['gdal_translate', '-of', 'GTiff', str(jp2_file), outfile]
-            subprocess.run(args, check=True, stdout=subprocess.DEVNULL)
+            try:
+                subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+            except subprocess.CalledProcessError as e:
+                raise ValueError("""
+                Command Failed: {}
+
+                STDOUT: {}
+
+                STDERR: {}
+                """.format(' '.join(e.cmd), e.stdout.decode(), e.stderr.decode()))
             outfiles.append(outfile)
         return outfiles
     elif zipfile.is_zipfile(infile):

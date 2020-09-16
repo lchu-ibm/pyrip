@@ -1,7 +1,7 @@
 import os
 import rasterio
 from rasterio.warp import calculate_default_transform, Resampling, reproject as rasterio_reproject
-# import subprocess
+import subprocess
 
 
 # def reproject(infile, outfile=None, t_srs='EPSG:4326'):
@@ -34,3 +34,40 @@ def reproject(infile, outfile=None, dst_crs='EPSG:4326'):
                     dst_crs=dst_crs,
                     resampling=Resampling.nearest)
     return outfile
+
+
+def warp(infile, outfile, bounds, resolution=None, shape=None, align_pixels=False):
+    outfile = outfile or os.path.splitext(infile)[0] + '_warped' + os.path.splitext(infile)[1]
+    args = ['gdalwarp']
+    args.extend(['-te', *bounds])
+    if resolution is None and shape is None:
+        raise ValueError('either resolution or shape must to be set.')
+    elif resolution is not None and shape is not None:
+        raise ValueError('resolution and shape cannot be set at the same time.')
+    elif resolution is not None:
+        args.extend(['-tr', resolution, resolution])
+        if align_pixels:
+            args.append('-tap')
+    else:
+        args.extend(['-ts', shape[1], shape[0]])
+    args.extend(['-overwrite', infile, outfile])
+    try:
+        subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+    except subprocess.CalledProcessError as e:
+        raise ValueError("""
+            Command Failed: {}
+
+            STDOUT: {}
+
+            STDERR: {}
+            """.format(' '.join(e.cmd), e.stdout.decode(), e.stderr.decode()))
+    return outfile
+
+
+def align(image, base_image, outfile=None):
+    outfile = outfile or os.path.splitext(image)[0] + '_aligned' + os.path.splitext(image)[1]
+    with rasterio.open(base_image) as dataset:
+        bounds = dataset.bounds
+        shape = dataset.shape
+    return warp(image, outfile, bounds, shape=shape)
+

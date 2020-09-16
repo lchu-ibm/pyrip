@@ -1,5 +1,4 @@
 import os
-import six
 import tempfile
 from pyrip.util import expand_bbox
 
@@ -15,10 +14,10 @@ def query_tiles_with_spark(spark, cos_api_key, cos_instance_crn, cos_endpoint_ur
                            start_date, end_date, bbox, download_dir, search_buffer_in_degrees=2, selected_dates=None,
                            merge_tiles=True, merge_by_date=True, force_bbox=True):
 
-    if isinstance(layers, six.string_types):
+    if isinstance(layers, str):
         layers = [layers]
 
-    if isinstance(selected_dates, six.string_types) or isinstance(selected_dates, six.integer_types):
+    if isinstance(selected_dates, str) or isinstance(selected_dates, int):
         selected_dates = [selected_dates]
 
     # Get COS client for downloading tiles
@@ -131,10 +130,10 @@ def query_tiles_with_spark(spark, cos_api_key, cos_instance_crn, cos_endpoint_ur
 def query_tiles(sql_client, cos_client, cos_url, target_cos_url, layers, start_date, end_date, bbox, download_dir,
                 search_buffer_in_degrees=2, selected_dates=None, merge_tiles=True, merge_by_date=True, force_bbox=True):
 
-    if isinstance(layers, six.string_types):
+    if isinstance(layers, str):
         layers = [layers]
 
-    if isinstance(selected_dates, six.string_types) or isinstance(selected_dates, six.integer_types):
+    if isinstance(selected_dates, str) or isinstance(selected_dates, int):
         selected_dates = [selected_dates]
 
     # By default, the result will be written into target_cos in CSV format. We disable this and make it write as

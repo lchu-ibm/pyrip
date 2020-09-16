@@ -12,5 +12,5 @@ setup(
     url='https://github.com/lchu-ibm/pyrip',
     author='Linsong Chu',
     author_email='lchu@us.ibm.com',
-    install_requires=['rasterio', 'pandas', 'six', 'numpy']
+    install_requires=['rasterio', 'pandas', 'numpy', 'shapely', 'pyproj']
 )
