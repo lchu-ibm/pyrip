@@ -51,6 +51,7 @@ def warp(infile, outfile, bounds, resolution=None, shape=None, align_pixels=Fals
     else:
         args.extend(['-ts', shape[1], shape[0]])
     args.extend(['-overwrite', infile, outfile])
+    args = [str(arg) for arg in args]
     try:
         subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
     except subprocess.CalledProcessError as e:
