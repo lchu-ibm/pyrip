@@ -1,8 +1,8 @@
 import os
 import rasterio
-import subprocess
 from rasterio.windows import Window, transform
 from rasterio.io import MemoryFile
+from .util import run_command
 
 
 def get_bounds(file):
@@ -11,27 +11,44 @@ def get_bounds(file):
     return rasterio.open(file).bounds
 
 
-def merge(files, outfile, bbox=None):
+def get_shape(file):
+    if isinstance(file, bytes):
+        return MemoryFile(file).open().shape
+    return rasterio.open(file).shape
+
+
+def rescale(infile, outfile, src_min, src_max, dst_min=0, dst_max=255, dtype=None):
+    args = ['gdal_translate']
+    if dtype is not None:
+        args.extend(['-ot', dtype])
+    args.extend(['-scale', src_min, src_max, dst_min, dst_max, infile, outfile])
+    run_command(args)
+    return outfile
+
+
+def merge(files, outfile, bbox=None, init_val=None, ignore_val=None, nodata_val=None):
+    try:
+        os.remove(outfile)
+    except OSError:
+        pass
     args = ['gdal_merge.py', '-o', outfile]
-    nodata = rasterio.open(files[0]).nodata
-    if nodata is not None:
-        args.extend(['-a_nodata', str(nodata)])
+    if init_val is not None:
+        args.extend(['-init', init_val])
+    if ignore_val is not None:
+        args.extend(['-n', ignore_val])
+    if nodata_val is not None:
+        args.extend(['-a_nodata', nodata_val])
+    else:
+        nodata = rasterio.open(files[0]).nodata
+        if nodata is not None:
+            args.extend(['-a_nodata', nodata])
     if bbox is not None:
         left, bottom, right, top = bbox
-        args.extend(['-ul_lr', str(left), str(top), str(right), str(bottom)])
+        args.extend(['-ul_lr', left, top, right, bottom])
     args.extend(files)
-    if not os.path.exists(os.path.dirname(outfile)):
-        os.makedirs(os.path.dirname(outfile))
-    try:
-        subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-    except subprocess.CalledProcessError as e:
-        raise ValueError("""
-        Command Failed: {}
-
-        STDOUT: {}
-
-        STDERR: {}
-        """.format(' '.join(e.cmd), e.stdout.decode(), e.stderr.decode()))
+    if not os.path.exists(os.path.dirname(os.path.abspath(outfile))):
+        os.makedirs(os.path.dirname(os.path.abspath(outfile)))
+    run_command(args)
 
     # # Copy existing band descriptions to the merged image
     # from osgeo import gdal

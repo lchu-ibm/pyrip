@@ -1,10 +1,11 @@
-import subprocess
 import os
 import struct
 from shapely.geometry import Point
 from shapely.ops import transform
 from shapely import wkt
 import pyproj
+from .util import run_command
+import subprocess
 
 from osgeo import gdal
 
@@ -34,18 +35,10 @@ def optimize(infile, outfile=None, block_size=512, compression='LZW', predictor=
         args.extend(['--config', 'AWS_ACCESS_KEY_ID', access_key_id])
         args.extend(['--config', 'AWS_SECRET_ACCESS_KEY', secret_access_key])
         args.extend(['--config', 'AWS_S3_ENDPOINT', endpoint.replace('https://', '')])
+        args.extend(['--config', 'GDAL_HTTP_UNSAFESSL', 'YES'])
 
     args.extend([infile, outfile])
-    try:
-        subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-    except subprocess.CalledProcessError as e:
-        raise ValueError("""
-            Command Failed: {}
-
-            STDOUT: {}
-
-            STDERR: {}
-            """.format(' '.join(e.cmd), e.stdout.decode(), e.stderr.decode()))
+    run_command(args)
     return outfile
 
 
@@ -54,7 +47,7 @@ def build_vrt(outfile, infiles, resolution=None, access_key_id=None, secret_acce
 
     # https://gdal.org/programs/gdalbuildvrt.html#cmdoption-gdalbuildvrt-resolution
     if resolution:
-        args.extend(['-resolution', 'user', '-tr', str(resolution), str(resolution), '-tap'])
+        args.extend(['-resolution', 'user', '-tr', resolution, resolution, '-tap'])
 
     if any(f.startswith('/vsis3') for f in infiles) or outfile.startswith('/vsis3'):
         if access_key_id is None or secret_access_key is None or endpoint is None:
@@ -62,31 +55,23 @@ def build_vrt(outfile, infiles, resolution=None, access_key_id=None, secret_acce
         args.extend(['--config', 'AWS_ACCESS_KEY_ID', access_key_id])
         args.extend(['--config', 'AWS_SECRET_ACCESS_KEY', secret_access_key])
         args.extend(['--config', 'AWS_S3_ENDPOINT', endpoint.replace('https://', '')])
+        args.extend(['--config', 'GDAL_HTTP_UNSAFESSL', 'YES'])
 
     args.append(outfile)
     if isinstance(infiles, str):
         infiles = [infiles]
     args.extend(infiles)
-
-    try:
-        subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-    except subprocess.CalledProcessError as e:
-        raise ValueError("""
-            Command Failed: {}
-
-            STDOUT: {}
-
-            STDERR: {}
-            """.format(' '.join(e.cmd), e.stdout.decode(), e.stderr.decode()))
+    run_command(args)
     return outfile
 
 
-def query(infile, bbox, outfile, compression='LZW', bbox_srs='EPSG:4326', verbose=False,
+def query(infile, outfile, bbox=None, compression='LZW', bbox_srs='EPSG:4326', verbose=False,
           access_key_id=None, secret_access_key=None, endpoint=None):
     args = ['gdal_translate']
     args.extend(['-projwin_srs', bbox_srs])
-    min_x, min_y, max_x, max_y = bbox
-    args.extend(['-projwin', str(min_x), str(max_y), str(max_x), str(min_y)])
+    if bbox is not None:
+        min_x, min_y, max_x, max_y = bbox
+        args.extend(['-projwin', min_x, max_y, max_x, min_y])
     args.extend(['-co', 'COMPRESS={}'.format(compression.upper() if compression else 'NONE')])
 
     if infile.startswith('/vsis3'):
@@ -96,11 +81,13 @@ def query(infile, bbox, outfile, compression='LZW', bbox_srs='EPSG:4326', verbos
         args.extend(['--config', 'AWS_ACCESS_KEY_ID', access_key_id])
         args.extend(['--config', 'AWS_SECRET_ACCESS_KEY', secret_access_key])
         args.extend(['--config', 'AWS_S3_ENDPOINT', endpoint.replace('https://', '')])
+        args.extend(['--config', 'GDAL_HTTP_UNSAFESSL', 'YES'])
 
     if verbose:
         args.extend(['--debug', 'on'])
 
     args.extend([infile, outfile])
+    args = [str(arg) for arg in args]
     try:
         p = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
         if verbose:
@@ -124,15 +111,15 @@ def buffer_point(lat, lon, radius):
     return transform(project.transform, Point(0, 0).buffer(radius))
 
 
-def query_radius(infile, lat, lon, radius, outfile, compression='LZW', bbox_srs='EPSG:4326', verbose=False,
+def query_radius(infile, outfile, lat, lon, radius, compression='LZW', bbox_srs='EPSG:4326', verbose=False,
                  access_key_id=None, secret_access_key=None, endpoint=None):
-    return query(infile, buffer_point(lat, lon, radius).bounds, outfile, compression, bbox_srs, verbose,
+    return query(infile, outfile, buffer_point(lat, lon, radius).bounds, compression, bbox_srs, verbose,
                  access_key_id, secret_access_key, endpoint)
 
 
-def query_polygon(infile, poly_wkt, outfile, compression='LZW', bbox_srs='EPSG:4326', verbose=False,
+def query_polygon(infile, outfile, poly_wkt, compression='LZW', bbox_srs='EPSG:4326', verbose=False,
                  access_key_id=None, secret_access_key=None, endpoint=None):
-    return query(infile, wkt.loads(poly_wkt).bounds, outfile, compression, bbox_srs, verbose,
+    return query(infile, outfile, wkt.loads(poly_wkt).bounds, compression, bbox_srs, verbose,
                  access_key_id, secret_access_key, endpoint)
 
 
@@ -145,6 +132,8 @@ def check_info(file, access_key_id=None, secret_access_key=None, endpoint=None):
         args.extend(['--config', 'AWS_ACCESS_KEY_ID', access_key_id])
         args.extend(['--config', 'AWS_SECRET_ACCESS_KEY', secret_access_key])
         args.extend(['--config', 'AWS_S3_ENDPOINT', endpoint.replace('https://', '')])
+        args.extend(['--config', 'GDAL_HTTP_UNSAFESSL', 'YES'])
+    args = [str(arg) for arg in args]
     try:
         p = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
         print(p.stdout.decode())

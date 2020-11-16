@@ -1,8 +1,23 @@
 import os
 import xml.etree.ElementTree as ET
+import subprocess
 
 
-def create_xyz_vrt(infile):
+def run_command(args):
+    args = [str(arg) for arg in args]
+    try:
+        subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+    except subprocess.CalledProcessError as e:
+        raise ValueError("""
+            Command Failed: {}
+            
+            STDOUT: {}
+            
+            STDERR: {}
+            """.format(' '.join(e.cmd), e.stdout.decode(), e.stderr.decode()))
+
+
+def create_xyz_vrt(infile, lat_col='lat', lon_col='lon'):
     layer_name = os.path.splitext(os.path.basename(infile))[0]
 
     data_source = ET.Element('OGRVRTDataSource')
@@ -10,7 +25,7 @@ def create_xyz_vrt(infile):
     ET.SubElement(layer, 'SrcDataSource').text = infile
     ET.SubElement(layer, 'GeometryType').text = 'wkbPoint'
     ET.SubElement(layer, 'LayerSRS').text = 'EPSG:4326'
-    ET.SubElement(layer, 'GeometryField', encoding='PointFromColumns', x='lon', y='lat')
+    ET.SubElement(layer, 'GeometryField', encoding='PointFromColumns', x=lon_col, y=lat_col)
     tree = ET.ElementTree(data_source)
     return tree
 

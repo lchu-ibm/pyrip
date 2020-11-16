@@ -1,7 +1,7 @@
 import os
 import rasterio
 from rasterio.warp import calculate_default_transform, Resampling, reproject as rasterio_reproject
-import subprocess
+from .util import run_command
 
 
 # def reproject(infile, outfile=None, t_srs='EPSG:4326'):
@@ -51,17 +51,7 @@ def warp(infile, outfile, bounds, resolution=None, shape=None, align_pixels=Fals
     else:
         args.extend(['-ts', shape[1], shape[0]])
     args.extend(['-overwrite', infile, outfile])
-    args = [str(arg) for arg in args]
-    try:
-        subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-    except subprocess.CalledProcessError as e:
-        raise ValueError("""
-            Command Failed: {}
-
-            STDOUT: {}
-
-            STDERR: {}
-            """.format(' '.join(e.cmd), e.stdout.decode(), e.stderr.decode()))
+    run_command(args)
     return outfile
 
 
