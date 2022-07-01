@@ -11,7 +11,7 @@ import rasterio
 from osgeo import gdal
 
 from .band import stack_bands
-from .util import create_xyz_vrt, run_command
+from .util import create_xyz_vrt, run_command, bake_gdal_options
 
 # Fix a bug in conda gdal: https://github.com/OSGeo/gdal/issues/1231
 if ';' in os.environ["PATH"]:
@@ -109,41 +109,54 @@ def df_to_tif(df, outfile, xres, yres=None, bbox=None, lat_col='lat', lon_col='l
             return stack_bands(tif_files, outfile)
 
 
-def hdf_to_tif(infile, outdir=None, match_substrs=None):
+def hdf_to_tif(infile, outdir=None, match_substrs=None, gdal_options=None):
+    gdal_options = bake_gdal_options(gdal_options)
     if infile.endswith('.gz'):
         decompressed_file = os.path.splitext(infile)[0]
-        with gzip.open(infile) as infile_:
-            with open(decompressed_file, 'wb') as outfile_:
-                shutil.copyfileobj(infile_, outfile_)
+        with gzip.open(infile) as _infile:
+            with open(decompressed_file, 'wb') as _outfile:
+                shutil.copyfileobj(_infile, _outfile)
         return hdf_to_tif(decompressed_file, outdir, match_substrs)
     ds = gdal.Open(infile, gdal.GA_ReadOnly)
     outfiles = []
-    for sub_ds in ds.GetSubDatasets():
-        sub_ds_name = sub_ds[0]
-        sub_ds_layer_name = sub_ds_name.split(':')[-1]
-        if match_substrs is not None and not any(match_substr in sub_ds_layer_name for match_substr in match_substrs):
-            continue
-        basename = os.path.splitext(os.path.basename(infile))[0]
-        connector = '_' if basename.count('_') >= basename.count('.') else '.'
-        if outdir is None:
-            outfile = os.path.splitext(infile)[0] + connector + sub_ds_layer_name + '.tif'
-        else:
-            if not os.path.exists(outdir):
-                os.makedirs(outdir)
-            outfilename = os.path.splitext(os.path.basename(infile))[0] + connector + sub_ds_layer_name + '.tif'
-            outfile = os.path.join(outdir, outfilename)
-        args = ['gdal_translate', '-of', 'GTiff', sub_ds_name, outfile]
+    # if hdf/netCDF file contains only one image, then it should be accessed directly
+    if not ds.GetSubDatasets():
+        outfile = os.path.splitext(infile)[0] + '.tif'
+        if outdir:
+            outfile = os.path.join(outdir, outfile)
+        args = ['gdal_translate', '-of', 'GTiff'] + gdal_options + [infile, outfile]
         run_command(args)
         outfiles.append(outfile)
+    # if hdf/netCDF file contains more than one images (datasets):
+    else:
+        for sub_ds in ds.GetSubDatasets():
+            sub_ds_name = sub_ds[0]
+            sub_ds_layer_name = sub_ds_name.split(':')[-1]
+            if match_substrs is not None and not any(match_substr in sub_ds_layer_name for match_substr in match_substrs):
+                continue
+            basename = os.path.splitext(os.path.basename(infile))[0]
+            connector = '_' if basename.count('_') >= basename.count('.') else '.'
+            if outdir is None:
+                outfile = os.path.splitext(infile)[0] + connector + sub_ds_layer_name + '.tif'
+            else:
+                if not os.path.exists(outdir):
+                    os.makedirs(outdir)
+                outfilename = os.path.splitext(os.path.basename(infile))[0] + connector + sub_ds_layer_name + '.tif'
+                outfile = os.path.join(outdir, outfilename)
+            args = ['gdal_translate', '-of', 'GTiff'] + gdal_options + [sub_ds_name, outfile]
+            run_command(args)
+            outfiles.append(outfile)
     return outfiles
 
 
 nc_to_tif = hdf_to_tif
+netcdf_to_tif = hdf_to_tif
 
 
-def safe_to_tif(infile, outdir=None, patterns=None):
+def safe_to_tif(infile, outdir=None, patterns=None, gdal_options=None):
     outdir = outdir or str(Path(infile).resolve().parent)
     patterns = patterns or ['*.jp2']
+    gdal_options = bake_gdal_options(gdal_options)
     # if .SAFE dir:
     if os.path.isdir(infile):
         outfiles = []
@@ -152,7 +165,7 @@ def safe_to_tif(infile, outdir=None, patterns=None):
             jp2_files.extend(Path(infile).rglob(pattern))
         for jp2_file in jp2_files:
             outfile = os.path.join(outdir, os.path.splitext(os.path.basename(str(jp2_file)))[0] + '.tif')
-            args = ['gdal_translate', '-of', 'GTiff', str(jp2_file), outfile]
+            args = ['gdal_translate', '-of', 'GTiff'] + gdal_options + [str(jp2_file), outfile]
             run_command(args)
             outfiles.append(outfile)
         return outfiles
@@ -165,8 +178,43 @@ def safe_to_tif(infile, outdir=None, patterns=None):
         raise TypeError("infile must be either a directory or zip file")
 
 
-def grib_to_tif(infile, outfile=None):
+def grib_to_tif(infile, outfile=None, gdal_options=None):
+    if infile.endswith('.gz'):
+        decompressed_file = os.path.splitext(infile)[0]
+        with gzip.open(infile) as _infile:
+            with open(decompressed_file, 'wb') as _outfile:
+                shutil.copyfileobj(_infile, _outfile)
+        return grib_to_tif(decompressed_file, outfile, gdal_options)
+    gdal_options = bake_gdal_options(gdal_options)
     outfile = outfile or os.path.splitext(infile)[0] + '.tif'
-    args = ['gdal_translate', '-of', 'GTiff', '-ot', 'Byte', '-scale', infile, outfile]
+    args = ['gdal_translate', '-of', 'GTiff', '-ot', 'Byte', '-scale'] + gdal_options + [infile, outfile]
+    run_command(args)
+    return outfile
+
+
+def grib2_to_tif(infile, outfile=None, gdal_options=None):
+    if infile.endswith('.gz'):
+        decompressed_file = os.path.splitext(infile)[0]
+        with gzip.open(infile) as _infile:
+            with open(decompressed_file, 'wb') as _outfile:
+                shutil.copyfileobj(_infile, _outfile)
+        return grib2_to_tif(decompressed_file, outfile, gdal_options)
+    gdal_options = bake_gdal_options(gdal_options)
+    outfile = outfile or os.path.splitext(infile)[0] + '.tif'
+    args = ['gdal_translate', '-of', 'GTiff'] + gdal_options + [infile, outfile]
+    run_command(args)
+    return outfile
+
+
+def jp2_to_tif(infile, outfile=None, gdal_options=None):
+    if infile.endswith('.gz'):
+        decompressed_file = os.path.splitext(infile)[0]
+        with gzip.open(infile) as _infile:
+            with open(decompressed_file, 'wb') as _outfile:
+                shutil.copyfileobj(_infile, _outfile)
+        return jp2_to_tif(decompressed_file, outfile, gdal_options)
+    gdal_options = bake_gdal_options(gdal_options)
+    outfile = outfile or os.path.splitext(infile)[0] + '.tif'
+    args = ['gdal_translate', '-of', 'GTiff'] + gdal_options + [infile, outfile]
     run_command(args)
     return outfile

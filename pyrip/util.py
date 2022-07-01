@@ -3,6 +3,15 @@ import xml.etree.ElementTree as ET
 import subprocess
 
 
+def bake_gdal_options(gdal_options):
+    if gdal_options is None:
+        return []
+    if not isinstance(gdal_options, list):
+        raise ValueError("gdal_options must be a list, e.g. gdal_options=['-ot', 'Float32', '-scale']")
+    gdal_options = [str(option) for option in gdal_options]
+    return gdal_options
+
+
 def run_command(args):
     args = [str(arg) for arg in args]
     try:

@@ -55,7 +55,7 @@ def warp(infile, outfile, bounds, resolution=None, shape=None, align_pixels=Fals
     return outfile
 
 
-def align(image, base_image, outfile=None):
+def pyalign(image, base_image, outfile=None):
     outfile = outfile or os.path.splitext(image)[0] + '_aligned' + os.path.splitext(image)[1]
     with rasterio.open(base_image) as dataset:
         bounds = dataset.bounds
